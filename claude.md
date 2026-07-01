@@ -30,4 +30,5 @@ node server.js
 npm install
 npm start
 npm test
+for /f "tokens=5" %a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do taskkill /PID %a /F
 ```

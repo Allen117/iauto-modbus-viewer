@@ -252,10 +252,28 @@
 
             if (!resp.ok) {
                 setStatus('錯誤: ' + (data.error || resp.statusText) + ' (' + new Date().toLocaleTimeString() + ')', 'error');
+                const fc = parseInt(document.getElementById('fc').value);
+                if (fc <= 2) {
+                    renderBitsError();
+                } else {
+                    renderRegistersError();
+                }
                 return;
             }
 
-            setStatus('讀取成功 (' + new Date().toLocaleTimeString() + ')', 'ok');
+            // Check if any values are null (partial read failure)
+            let hasNull = false;
+            if (data.type === 'bits') {
+                hasNull = data.bits.some(function(b) { return b === null; });
+            } else {
+                hasNull = data.registers.some(function(r) { return r === null; });
+            }
+
+            if (hasNull) {
+                setStatus('部分位址無法讀取 (' + new Date().toLocaleTimeString() + ')', 'error');
+            } else {
+                setStatus('讀取成功 (' + new Date().toLocaleTimeString() + ')', 'ok');
+            }
 
             if (data.type === 'bits') {
                 renderBits(data.bits);
@@ -273,8 +291,12 @@
         const startAddr = parseInt(document.getElementById('address').value) || 0;
         let html = '<div class="section-title">Coil / Discrete Input 值</div><div class="bits-grid">';
         bits.forEach((b, i) => {
-            const cls = b ? 'bit-on' : 'bit-off';
-            html += '<div class="bit-item ' + cls + '">#' + (startAddr + i) + ': ' + (b ? '1' : '0') + '</div>';
+            if (b === null) {
+                html += '<div class="bit-item bit-off">#' + (startAddr + i) + ': 無法讀取</div>';
+            } else {
+                const cls = b ? 'bit-on' : 'bit-off';
+                html += '<div class="bit-item ' + cls + '">#' + (startAddr + i) + ': ' + (b ? '1' : '0') + '</div>';
+            }
         });
         html += '</div>';
         section.innerHTML = html;
@@ -287,57 +309,118 @@
         const rawDiv = document.getElementById('rawData');
         const hexParts = [];
         for (let i = 0; i < registers.length; i++) {
-            hexParts.push('Reg[' + i + ']=0x' + registers[i].toString(16).toUpperCase().padStart(4, '0'));
+            if (registers[i] === null) {
+                hexParts.push('Reg[' + i + ']=無法讀取');
+            } else {
+                hexParts.push('Reg[' + i + ']=0x' + registers[i].toString(16).toUpperCase().padStart(4, '0'));
+            }
         }
         rawDiv.textContent = hexParts.join('  ');
 
-        // Build byte array from rawBytes
-        const bytes = new Uint8Array(rawBytes);
-        const totalBytes = bytes.length;
+        // Build byte array (nulls become 0 for Uint8Array, but track validity)
+        const cleanBytes = rawBytes.map(function(b) { return b === null ? 0 : b; });
+        const bytes = new Uint8Array(cleanBytes);
+        const totalBytes = rawBytes.length;
 
-        // Decode all types
+        // Check if first `count` bytes in rawBytes are all valid (not null)
+        function bytesValid(count) {
+            for (let i = 0; i < count; i++) {
+                if (i >= rawBytes.length || rawBytes[i] === null) return false;
+            }
+            return true;
+        }
+
+        const ERR = '無法讀取';
         const rows = [];
 
         // === 1-register types (2 bytes) ===
         if (totalBytes >= 2) {
-            rows.push({ type: 'Integer', desc: 'Int16', words: 1, signed: true, value: decodeInteger(bytes) });
-            rows.push({ type: 'UInteger', desc: 'UInt16', words: 1, signed: false, value: decodeUInteger(bytes) });
+            rows.push({ type: 'Integer', desc: 'Int16', words: 1, signed: true, value: bytesValid(2) ? decodeInteger(bytes) : ERR });
+            rows.push({ type: 'UInteger', desc: 'UInt16', words: 1, signed: false, value: bytesValid(2) ? decodeUInteger(bytes) : ERR });
         }
 
         // === 2-register types (4 bytes) ===
         if (totalBytes >= 4) {
-            rows.push({ type: 'FloatingPt', desc: 'Float32', words: 2, signed: true, value: decodeFloatingPt(bytes) });
-            rows.push({ type: 'SwappedFP', desc: 'Float32 Swapped', words: 2, signed: true, value: decodeSwappedFP(bytes) });
-            rows.push({ type: 'Integer32', desc: 'Int32', words: 2, signed: true, value: decodeInteger32(bytes) });
-            rows.push({ type: 'UInteger32', desc: 'UInt32', words: 2, signed: false, value: decodeUInteger32(bytes) });
-            rows.push({ type: 'SwappedInteger32', desc: 'Int32 Swapped', words: 2, signed: true, value: decodeSwappedInteger32(bytes) });
-            rows.push({ type: 'SwappedUInteger32', desc: 'UInt32 Swapped', words: 2, signed: false, value: decodeSwappedUInteger32(bytes) });
+            rows.push({ type: 'FloatingPt', desc: 'Float32', words: 2, signed: true, value: bytesValid(4) ? decodeFloatingPt(bytes) : ERR });
+            rows.push({ type: 'SwappedFP', desc: 'Float32 Swapped', words: 2, signed: true, value: bytesValid(4) ? decodeSwappedFP(bytes) : ERR });
+            rows.push({ type: 'Integer32', desc: 'Int32', words: 2, signed: true, value: bytesValid(4) ? decodeInteger32(bytes) : ERR });
+            rows.push({ type: 'UInteger32', desc: 'UInt32', words: 2, signed: false, value: bytesValid(4) ? decodeUInteger32(bytes) : ERR });
+            rows.push({ type: 'SwappedInteger32', desc: 'Int32 Swapped', words: 2, signed: true, value: bytesValid(4) ? decodeSwappedInteger32(bytes) : ERR });
+            rows.push({ type: 'SwappedUInteger32', desc: 'UInt32 Swapped', words: 2, signed: false, value: bytesValid(4) ? decodeSwappedUInteger32(bytes) : ERR });
         }
 
         // === 4-register types (8 bytes) ===
         if (totalBytes >= 8) {
-            rows.push({ type: 'Double', desc: 'Float64', words: 4, signed: true, value: decodeDouble(bytes) });
-            rows.push({ type: 'SwappedDbl', desc: 'Float64 Swapped', words: 4, signed: true, value: decodeSwappedDbl(bytes) });
-            rows.push({ type: 'Integer64', desc: 'Int64', words: 4, signed: true, value: decodeInteger64(bytes) });
-            rows.push({ type: 'UInteger64', desc: 'UInt64', words: 4, signed: false, value: decodeUInteger64(bytes) });
-            rows.push({ type: 'SwappedInteger64', desc: 'Int64 Swapped', words: 4, signed: true, value: decodeSwappedInteger64(bytes) });
-            rows.push({ type: 'SwappedUInteger64', desc: 'UInt64 Swapped', words: 4, signed: false, value: decodeSwappedUInteger64(bytes) });
+            rows.push({ type: 'Double', desc: 'Float64', words: 4, signed: true, value: bytesValid(8) ? decodeDouble(bytes) : ERR });
+            rows.push({ type: 'SwappedDbl', desc: 'Float64 Swapped', words: 4, signed: true, value: bytesValid(8) ? decodeSwappedDbl(bytes) : ERR });
+            rows.push({ type: 'Integer64', desc: 'Int64', words: 4, signed: true, value: bytesValid(8) ? decodeInteger64(bytes) : ERR });
+            rows.push({ type: 'UInteger64', desc: 'UInt64', words: 4, signed: false, value: bytesValid(8) ? decodeUInteger64(bytes) : ERR });
+            rows.push({ type: 'SwappedInteger64', desc: 'Int64 Swapped', words: 4, signed: true, value: bytesValid(8) ? decodeSwappedInteger64(bytes) : ERR });
+            rows.push({ type: 'SwappedUInteger64', desc: 'UInt64 Swapped', words: 4, signed: false, value: bytesValid(8) ? decodeSwappedUInteger64(bytes) : ERR });
         }
 
         // === BCD (last) ===
         if (totalBytes >= 2) {
-            rows.push({ type: 'BCD', desc: '4-digit BCD', words: 1, signed: false, value: decodeBCD(bytes) });
+            rows.push({ type: 'BCD', desc: '4-digit BCD', words: 1, signed: false, value: bytesValid(2) ? decodeBCD(bytes) : ERR });
         }
 
         // Render table
         const section = document.getElementById('resultSection');
         let html = '<table><thead><tr><th>解碼 Type</th><th>Words</th><th>有負值</th><th>數值</th></tr></thead><tbody>';
         rows.forEach(r => {
+            const isError = (r.value === ERR);
             html += '<tr>';
             html += '<td><span class="type-name">' + r.type + '</span></td>';
             html += '<td style="text-align:center;">' + r.words + '</td>';
             html += '<td style="text-align:center;">' + (r.signed ? 'Yes' : 'No') + '</td>';
-            html += '<td class="value-cell">' + r.value + '</td>';
+            html += '<td class="value-cell"' + (isError ? ' style="color:#d93025;"' : '') + '>' + r.value + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        section.innerHTML = html;
+    }
+
+    function renderBitsError() {
+        document.getElementById('rawSection').style.display = 'none';
+        const section = document.getElementById('resultSection');
+        const startAddr = parseInt(document.getElementById('address').value) || 0;
+        const length = parseInt(document.getElementById('length').value) || 1;
+        let html = '<div class="section-title">Coil / Discrete Input 值</div><div class="bits-grid">';
+        for (let i = 0; i < length; i++) {
+            html += '<div class="bit-item bit-off">#' + (startAddr + i) + ': 無法讀取</div>';
+        }
+        html += '</div>';
+        section.innerHTML = html;
+    }
+
+    function renderRegistersError() {
+        document.getElementById('rawSection').style.display = 'none';
+        const section = document.getElementById('resultSection');
+        const errorText = '無法讀取';
+        const rows = [
+            { type: 'Integer', desc: 'Int16', words: 1, signed: true },
+            { type: 'UInteger', desc: 'UInt16', words: 1, signed: false },
+            { type: 'FloatingPt', desc: 'Float32', words: 2, signed: true },
+            { type: 'SwappedFP', desc: 'Float32 Swapped', words: 2, signed: true },
+            { type: 'Integer32', desc: 'Int32', words: 2, signed: true },
+            { type: 'UInteger32', desc: 'UInt32', words: 2, signed: false },
+            { type: 'SwappedInteger32', desc: 'Int32 Swapped', words: 2, signed: true },
+            { type: 'SwappedUInteger32', desc: 'UInt32 Swapped', words: 2, signed: false },
+            { type: 'Double', desc: 'Float64', words: 4, signed: true },
+            { type: 'SwappedDbl', desc: 'Float64 Swapped', words: 4, signed: true },
+            { type: 'Integer64', desc: 'Int64', words: 4, signed: true },
+            { type: 'UInteger64', desc: 'UInt64', words: 4, signed: false },
+            { type: 'SwappedInteger64', desc: 'Int64 Swapped', words: 4, signed: true },
+            { type: 'SwappedUInteger64', desc: 'UInt64 Swapped', words: 4, signed: false },
+            { type: 'BCD', desc: '4-digit BCD', words: 1, signed: false },
+        ];
+        let html = '<table><thead><tr><th>解碼 Type</th><th>Words</th><th>有負值</th><th>數值</th></tr></thead><tbody>';
+        rows.forEach(r => {
+            html += '<tr>';
+            html += '<td><span class="type-name">' + r.type + '</span></td>';
+            html += '<td style="text-align:center;">' + r.words + '</td>';
+            html += '<td style="text-align:center;">' + (r.signed ? 'Yes' : 'No') + '</td>';
+            html += '<td class="value-cell" style="color:#d93025;">' + errorText + '</td>';
             html += '</tr>';
         });
         html += '</tbody></table>';

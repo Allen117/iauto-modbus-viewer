@@ -37,34 +37,82 @@ app.get('/api/read', async (req, res) => {
         let result;
         switch (fc) {
             case 1:
-                result = await client.readCoils(address, length);
-                res.json({
-                    type: 'bits',
-                    bits: result.data.slice(0, length)
-                });
+                try {
+                    result = await client.readCoils(address, length);
+                    res.json({ type: 'bits', bits: result.data.slice(0, length) });
+                } catch (readErr) {
+                    const bits = [];
+                    for (let i = 0; i < length; i++) {
+                        try {
+                            const single = await client.readCoils(address + i, 1);
+                            bits.push(single.data[0]);
+                        } catch (e) { bits.push(null); }
+                    }
+                    res.json({ type: 'bits', bits });
+                }
                 break;
             case 2:
-                result = await client.readDiscreteInputs(address, length);
-                res.json({
-                    type: 'bits',
-                    bits: result.data.slice(0, length)
-                });
+                try {
+                    result = await client.readDiscreteInputs(address, length);
+                    res.json({ type: 'bits', bits: result.data.slice(0, length) });
+                } catch (readErr) {
+                    const bits = [];
+                    for (let i = 0; i < length; i++) {
+                        try {
+                            const single = await client.readDiscreteInputs(address + i, 1);
+                            bits.push(single.data[0]);
+                        } catch (e) { bits.push(null); }
+                    }
+                    res.json({ type: 'bits', bits });
+                }
                 break;
             case 3:
-                result = await client.readHoldingRegisters(address, length);
-                res.json({
-                    type: 'registers',
-                    registers: Array.from(result.data),
-                    rawBytes: Array.from(result.buffer)
-                });
+                try {
+                    result = await client.readHoldingRegisters(address, length);
+                    res.json({
+                        type: 'registers',
+                        registers: Array.from(result.data),
+                        rawBytes: Array.from(result.buffer)
+                    });
+                } catch (readErr) {
+                    const registers = [];
+                    const rawBytes = [];
+                    for (let i = 0; i < length; i++) {
+                        try {
+                            const single = await client.readHoldingRegisters(address + i, 1);
+                            registers.push(single.data[0]);
+                            rawBytes.push(single.buffer[0], single.buffer[1]);
+                        } catch (e) {
+                            registers.push(null);
+                            rawBytes.push(null, null);
+                        }
+                    }
+                    res.json({ type: 'registers', registers, rawBytes });
+                }
                 break;
             case 4:
-                result = await client.readInputRegisters(address, length);
-                res.json({
-                    type: 'registers',
-                    registers: Array.from(result.data),
-                    rawBytes: Array.from(result.buffer)
-                });
+                try {
+                    result = await client.readInputRegisters(address, length);
+                    res.json({
+                        type: 'registers',
+                        registers: Array.from(result.data),
+                        rawBytes: Array.from(result.buffer)
+                    });
+                } catch (readErr) {
+                    const registers = [];
+                    const rawBytes = [];
+                    for (let i = 0; i < length; i++) {
+                        try {
+                            const single = await client.readInputRegisters(address + i, 1);
+                            registers.push(single.data[0]);
+                            rawBytes.push(single.buffer[0], single.buffer[1]);
+                        } catch (e) {
+                            registers.push(null);
+                            rawBytes.push(null, null);
+                        }
+                    }
+                    res.json({ type: 'registers', registers, rawBytes });
+                }
                 break;
         }
     } catch (err) {
