@@ -1,0 +1,24 @@
+{
+  "name": "iauto-modbus-viewer",
+  "version": "1.0.0",
+  "description": "iAUTO Modbus TCP 通訊檢視工具",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "pkg . --targets node22-win-x64 --output dist/iAUTO通訊檢視工具.exe"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ],
+    "outputPath": "dist"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "modbus-serial": "^8.0.25"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.21.0"
+  }
+}

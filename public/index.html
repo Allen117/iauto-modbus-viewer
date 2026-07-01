@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iAUTO Modbus TCP 通訊檢視工具</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Microsoft JhengHei', 'Segoe UI', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #333;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #1a237e;
+            font-size: 1.5em;
+        }
+        .panel {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 16px;
+            max-width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px;
+            align-items: end;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            font-size: 0.85em;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #555;
+        }
+        .form-group input, .form-group select {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.95em;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+        }
+        .btn {
+            padding: 10px 28px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.95em;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-start {
+            background: #1a73e8;
+            color: #fff;
+        }
+        .btn-start:hover { background: #1557b0; }
+        .btn-start:disabled {
+            background: #94c2f5;
+            cursor: not-allowed;
+        }
+        .btn-stop {
+            background: #d93025;
+            color: #fff;
+        }
+        .btn-stop:hover { background: #b3261e; }
+        .btn-stop:disabled {
+            background: #f0a8a3;
+            cursor: not-allowed;
+        }
+        .status-bar {
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin-bottom: 12px;
+        }
+        .status-idle { background: #e8eaed; color: #555; }
+        .status-ok { background: #e6f4ea; color: #1e7e34; }
+        .status-error { background: #fce8e6; color: #d93025; }
+        .raw-data {
+            background: #263238;
+            color: #80cbc4;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+            margin-bottom: 12px;
+            min-height: 36px;
+        }
+        .raw-label {
+            font-size: 0.8em;
+            color: #78909c;
+            margin-bottom: 2px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead th {
+            background: #1a237e;
+            color: #fff;
+            padding: 10px 14px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        tbody td {
+            padding: 8px 14px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 0.9em;
+        }
+        tbody tr:nth-child(even) { background: #fafafa; }
+        tbody tr:hover { background: #e3f2fd; }
+        .type-name { font-weight: bold; color: #37474f; }
+        .type-desc { font-size: 0.8em; color: #78909c; margin-left: 6px; }
+        .value-cell {
+            font-family: 'Consolas', 'Courier New', monospace;
+            color: #1a237e;
+            font-weight: bold;
+        }
+        .section-title {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #1a237e;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #1a237e;
+            padding-bottom: 4px;
+        }
+        .bits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 4px;
+        }
+        .bit-item {
+            text-align: center;
+            padding: 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.85em;
+        }
+        .bit-on { background: #c8e6c9; color: #2e7d32; font-weight: bold; }
+        .bit-off { background: #f5f5f5; color: #999; }
+    </style>
+</head>
+<body>
+    <h1>iAUTO Modbus TCP 通訊檢視工具</h1>
+
+    <div class="panel">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>IP 位址</label>
+                <input type="text" id="ip" value="127.0.0.1" />
+            </div>
+            <div class="form-group">
+                <label>Port</label>
+                <input type="number" id="port" value="502" min="1" max="65535" />
+            </div>
+            <div class="form-group">
+                <label>Unit ID</label>
+                <input type="number" id="unitId" value="1" min="0" max="255" />
+            </div>
+            <div class="form-group">
+                <label>Function Code</label>
+                <select id="fc">
+                    <option value="1">FC01 Read Coils</option>
+                    <option value="2">FC02 Read Discrete Inputs</option>
+                    <option value="3" selected>FC03 Read Holding Registers</option>
+                    <option value="4">FC04 Read Input Registers</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Start Address</label>
+                <input type="number" id="address" value="0" min="0" max="65535" />
+            </div>
+            <div class="form-group">
+                <label>Length</label>
+                <input type="number" id="length" value="1" min="1" max="125" />
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-start" id="btnStart" onclick="startPolling()">開始讀取</button>
+            <button class="btn btn-stop" id="btnStop" onclick="stopPolling()" disabled>停止</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div id="statusBar" class="status-bar status-idle">尚未開始</div>
+        <div id="rawSection" style="display:none;">
+            <div class="raw-label">Raw Data (Hex)</div>
+            <div class="raw-data" id="rawData"></div>
+        </div>
+        <div id="resultSection"></div>
+    </div>
+
+    <script>
+    let pollingTimer = null;
+
+    function startPolling() {
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled = false;
+        poll();
+        pollingTimer = setInterval(poll, 1000);
+    }
+
+    function stopPolling() {
+        if (pollingTimer) {
+            clearInterval(pollingTimer);
+            pollingTimer = null;
+        }
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+        setStatus('已停止', 'idle');
+    }
+
+    function setStatus(msg, type) {
+        const bar = document.getElementById('statusBar');
+        bar.textContent = msg;
+        bar.className = 'status-bar status-' + type;
+    }
+
+    async function poll() {
+        const params = new URLSearchParams({
+            ip: document.getElementById('ip').value,
+            port: document.getElementById('port').value,
+            unitId: document.getElementById('unitId').value,
+            fc: document.getElementById('fc').value,
+            address: document.getElementById('address').value,
+            length: document.getElementById('length').value,
+        });
+
+        try {
+            const resp = await fetch('/api/read?' + params.toString());
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                setStatus('錯誤: ' + (data.error || resp.statusText) + ' (' + new Date().toLocaleTimeString() + ')', 'error');
+                return;
+            }
+
+            setStatus('讀取成功 (' + new Date().toLocaleTimeString() + ')', 'ok');
+
+            if (data.type === 'bits') {
+                renderBits(data.bits);
+            } else {
+                renderRegisters(data.registers, data.rawBytes);
+            }
+        } catch (err) {
+            setStatus('連線失敗: ' + err.message + ' (' + new Date().toLocaleTimeString() + ')', 'error');
+        }
+    }
+
+    function renderBits(bits) {
+        document.getElementById('rawSection').style.display = 'none';
+        const section = document.getElementById('resultSection');
+        const startAddr = parseInt(document.getElementById('address').value) || 0;
+        let html = '<div class="section-title">Coil / Discrete Input 值</div><div class="bits-grid">';
+        bits.forEach((b, i) => {
+            const cls = b ? 'bit-on' : 'bit-off';
+            html += '<div class="bit-item ' + cls + '">#' + (startAddr + i) + ': ' + (b ? '1' : '0') + '</div>';
+        });
+        html += '</div>';
+        section.innerHTML = html;
+    }
+
+    function renderRegisters(registers, rawBytes) {
+        // Show raw hex
+        const rawSection = document.getElementById('rawSection');
+        rawSection.style.display = 'block';
+        const rawDiv = document.getElementById('rawData');
+        const hexParts = [];
+        for (let i = 0; i < registers.length; i++) {
+            hexParts.push('Reg[' + i + ']=0x' + registers[i].toString(16).toUpperCase().padStart(4, '0'));
+        }
+        rawDiv.textContent = hexParts.join('  ');
+
+        // Build byte array from rawBytes
+        const bytes = new Uint8Array(rawBytes);
+        const totalBytes = bytes.length;
+
+        // Decode all types
+        const rows = [];
+
+        // === 1-register types (2 bytes) ===
+        if (totalBytes >= 2) {
+            rows.push({ type: 'Integer', desc: 'Int16', words: 1, signed: true, value: decodeInteger(bytes) });
+            rows.push({ type: 'UInteger', desc: 'UInt16', words: 1, signed: false, value: decodeUInteger(bytes) });
+        }
+
+        // === 2-register types (4 bytes) ===
+        if (totalBytes >= 4) {
+            rows.push({ type: 'FloatingPt', desc: 'Float32', words: 2, signed: true, value: decodeFloatingPt(bytes) });
+            rows.push({ type: 'SwappedFP', desc: 'Float32 Swapped', words: 2, signed: true, value: decodeSwappedFP(bytes) });
+            rows.push({ type: 'Integer32', desc: 'Int32', words: 2, signed: true, value: decodeInteger32(bytes) });
+            rows.push({ type: 'UInteger32', desc: 'UInt32', words: 2, signed: false, value: decodeUInteger32(bytes) });
+            rows.push({ type: 'SwappedInteger32', desc: 'Int32 Swapped', words: 2, signed: true, value: decodeSwappedInteger32(bytes) });
+            rows.push({ type: 'SwappedUInteger32', desc: 'UInt32 Swapped', words: 2, signed: false, value: decodeSwappedUInteger32(bytes) });
+        }
+
+        // === 4-register types (8 bytes) ===
+        if (totalBytes >= 8) {
+            rows.push({ type: 'Double', desc: 'Float64', words: 4, signed: true, value: decodeDouble(bytes) });
+            rows.push({ type: 'SwappedDbl', desc: 'Float64 Swapped', words: 4, signed: true, value: decodeSwappedDbl(bytes) });
+            rows.push({ type: 'Integer64', desc: 'Int64', words: 4, signed: true, value: decodeInteger64(bytes) });
+            rows.push({ type: 'UInteger64', desc: 'UInt64', words: 4, signed: false, value: decodeUInteger64(bytes) });
+            rows.push({ type: 'SwappedInteger64', desc: 'Int64 Swapped', words: 4, signed: true, value: decodeSwappedInteger64(bytes) });
+            rows.push({ type: 'SwappedUInteger64', desc: 'UInt64 Swapped', words: 4, signed: false, value: decodeSwappedUInteger64(bytes) });
+        }
+
+        // === BCD (last) ===
+        if (totalBytes >= 2) {
+            rows.push({ type: 'BCD', desc: '4-digit BCD', words: 1, signed: false, value: decodeBCD(bytes) });
+        }
+
+        // Render table
+        const section = document.getElementById('resultSection');
+        let html = '<table><thead><tr><th>解碼 Type</th><th>Words</th><th>有負值</th><th>數值</th></tr></thead><tbody>';
+        rows.forEach(r => {
+            html += '<tr>';
+            html += '<td><span class="type-name">' + r.type + '</span></td>';
+            html += '<td style="text-align:center;">' + r.words + '</td>';
+            html += '<td style="text-align:center;">' + (r.signed ? 'Yes' : 'No') + '</td>';
+            html += '<td class="value-cell">' + r.value + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        section.innerHTML = html;
+    }
+
+    // ===== Decode Functions (matching VB code byte order exactly) =====
+
+    // Integer (Int16): bytes [1,0] -> Int16LE
+    function decodeInteger(bytes) {
+        const buf = new ArrayBuffer(2);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[1];
+        u8[1] = bytes[0];
+        return view.getInt16(0, true);
+    }
+
+    // UInteger (UInt16): bytes [1,0] -> Uint16LE
+    function decodeUInteger(bytes) {
+        const buf = new ArrayBuffer(2);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[1];
+        u8[1] = bytes[0];
+        return view.getUint16(0, true);
+    }
+
+    // BCD: ((byte0 >> 4)*1000 + (byte0 & 0x0F)*100 + (byte1 >> 4)*10 + (byte1 & 0x0F))
+    function decodeBCD(bytes) {
+        const b0 = bytes[0];
+        const b1 = bytes[1];
+        return (b0 >> 4) * 1000 + (b0 & 0x0F) * 100 + (b1 >> 4) * 10 + (b1 & 0x0F);
+    }
+
+    // FloatingPt (Float32): bytes [1,0,3,2] -> Float32LE
+    function decodeFloatingPt(bytes) {
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[1];
+        u8[1] = bytes[0];
+        u8[2] = bytes[3];
+        u8[3] = bytes[2];
+        return view.getFloat32(0, true);
+    }
+
+    // SwappedFP (Float32): bytes [3,2,1,0] -> Float32LE
+    function decodeSwappedFP(bytes) {
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[3];
+        u8[1] = bytes[2];
+        u8[2] = bytes[1];
+        u8[3] = bytes[0];
+        return view.getFloat32(0, true);
+    }
+
+    // Integer32 (Int32): bytes [3,2,1,0] -> Int32LE
+    function decodeInteger32(bytes) {
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[3];
+        u8[1] = bytes[2];
+        u8[2] = bytes[1];
+        u8[3] = bytes[0];
+        return view.getInt32(0, true);
+    }
+
+    // UInteger32 (UInt32): bytes [3,2,1,0] -> Uint32LE
+    function decodeUInteger32(bytes) {
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[3];
+        u8[1] = bytes[2];
+        u8[2] = bytes[1];
+        u8[3] = bytes[0];
+        return view.getUint32(0, true);
+    }
+
+    // SwappedInteger32 (Int32): bytes [1,0,3,2] -> Int32LE
+    function decodeSwappedInteger32(bytes) {
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[1];
+        u8[1] = bytes[0];
+        u8[2] = bytes[3];
+        u8[3] = bytes[2];
+        return view.getInt32(0, true);
+    }
+
+    // SwappedUInteger32 (UInt32): bytes [1,0,3,2] -> Uint32LE
+    function decodeSwappedUInteger32(bytes) {
+        const buf = new ArrayBuffer(4);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[1];
+        u8[1] = bytes[0];
+        u8[2] = bytes[3];
+        u8[3] = bytes[2];
+        return view.getUint32(0, true);
+    }
+
+    // Double (Float64): bytes [1,0,3,2,5,4,7,6] -> Float64LE
+    function decodeDouble(bytes) {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[1];
+        u8[1] = bytes[0];
+        u8[2] = bytes[3];
+        u8[3] = bytes[2];
+        u8[4] = bytes[5];
+        u8[5] = bytes[4];
+        u8[6] = bytes[7];
+        u8[7] = bytes[6];
+        return view.getFloat64(0, true);
+    }
+
+    // SwappedDbl (Float64): bytes [7,6,5,4,3,2,1,0] -> Float64LE
+    function decodeSwappedDbl(bytes) {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[7];
+        u8[1] = bytes[6];
+        u8[2] = bytes[5];
+        u8[3] = bytes[4];
+        u8[4] = bytes[3];
+        u8[5] = bytes[2];
+        u8[6] = bytes[1];
+        u8[7] = bytes[0];
+        return view.getFloat64(0, true);
+    }
+
+    // Integer64 (Int64): bytes [7,6,5,4,3,2,1,0] -> BigInt64LE
+    function decodeInteger64(bytes) {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[7];
+        u8[1] = bytes[6];
+        u8[2] = bytes[5];
+        u8[3] = bytes[4];
+        u8[4] = bytes[3];
+        u8[5] = bytes[2];
+        u8[6] = bytes[1];
+        u8[7] = bytes[0];
+        return view.getBigInt64(0, true).toString();
+    }
+
+    // UInteger64 (UInt64): bytes [7,6,5,4,3,2,1,0] -> BigUint64LE
+    function decodeUInteger64(bytes) {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[7];
+        u8[1] = bytes[6];
+        u8[2] = bytes[5];
+        u8[3] = bytes[4];
+        u8[4] = bytes[3];
+        u8[5] = bytes[2];
+        u8[6] = bytes[1];
+        u8[7] = bytes[0];
+        return view.getBigUint64(0, true).toString();
+    }
+
+    // SwappedInteger64 (Int64): bytes [3,2,1,0,7,6,5,4] -> BigInt64LE
+    function decodeSwappedInteger64(bytes) {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[3];
+        u8[1] = bytes[2];
+        u8[2] = bytes[1];
+        u8[3] = bytes[0];
+        u8[4] = bytes[7];
+        u8[5] = bytes[6];
+        u8[6] = bytes[5];
+        u8[7] = bytes[4];
+        return view.getBigInt64(0, true).toString();
+    }
+
+    // SwappedUInteger64 (UInt64): bytes [3,2,1,0,7,6,5,4] -> BigUint64LE
+    function decodeSwappedUInteger64(bytes) {
+        const buf = new ArrayBuffer(8);
+        const view = new DataView(buf);
+        const u8 = new Uint8Array(buf);
+        u8[0] = bytes[3];
+        u8[1] = bytes[2];
+        u8[2] = bytes[1];
+        u8[3] = bytes[0];
+        u8[4] = bytes[7];
+        u8[5] = bytes[6];
+        u8[6] = bytes[5];
+        u8[7] = bytes[4];
+        return view.getBigUint64(0, true).toString();
+    }
+    </script>
+</body>
+</html>
